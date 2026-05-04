@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F7F3EE;
+  --surface: #FFFFFF;
+  --foreground: #1C1A18;
+  --muted: #6B5E58;
+  --border: #DDD3C6;
+  --accent: #9B6E4A;
+  --accent-light: #EDE0D0;
+  --card: #FDFAF7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-card: var(--card);
+  --font-serif: var(--font-cormorant);
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--accent-light);
+  color: var(--foreground);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Chat messages fade-in */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.3s ease-out forwards;
+}
+
+/* Breathing animation for the mic button when recording */
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(155, 110, 74, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(155, 110, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(155, 110, 74, 0); }
+}
+
+.recording-pulse {
+  animation: pulse-ring 1.2s ease-out infinite;
+}
