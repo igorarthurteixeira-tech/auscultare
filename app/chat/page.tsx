@@ -323,7 +323,7 @@ export default function Chat() {
           )}
         </div>
 
-        {/* Direita — usuário + sair */}
+        {/* Direita — usuário + horas + sair */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/profile")}
@@ -332,6 +332,15 @@ export default function Chat() {
           >
             Olá, {profile?.name || userEmail?.split("@")[0]}
           </button>
+          {!anonymous && (
+            <button
+              onClick={() => setShowPlanModal(true)}
+              className="text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
+              style={{ background: "var(--accent-light)", color: "var(--accent)", fontFamily: "var(--font-inter)" }}
+            >
+              + Horas
+            </button>
+          )}
           <button
             onClick={handleSignOut}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
