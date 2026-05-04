@@ -1,5 +1,3 @@
-import Groq from "groq-sdk";
-
 const SYSTEM_PROMPT = `Você é Auscultare. Você acompanha pessoas — ouve, compreende, e só então orienta.
 
 ## A sequência que nunca muda
@@ -58,62 +56,124 @@ function buildSystemPrompt(
   return SYSTEM_PROMPT + (parts.length > 0 ? "\n\n" + parts.join("\n\n") : "");
 }
 
+type Message = { role: string; content: string };
+
+async function callGroq(messages: Message[], systemPrompt: string): Promise<string> {
+  const { default: Groq } = await import("groq-sdk");
+  const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 20000);
+  try {
+    const stream = await client.chat.completions.create(
+      {
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
+        stream: true,
+        max_tokens: 450,
+      },
+      { signal: abort.signal }
+    );
+    let text = "";
+    for await (const chunk of stream) text += chunk.choices[0]?.delta?.content ?? "";
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callGemini(messages: Message[], systemPrompt: string): Promise<string> {
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { maxOutputTokens: 450 },
+      }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error?.message ?? res.status), { status: res.status });
+  return data.candidates[0].content.parts[0].text;
+}
+
+async function callCerebras(messages: Message[], systemPrompt: string): Promise<string> {
+  const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.CEREBRAS_API_KEY}` },
+    signal: AbortSignal.timeout(20000),
+    body: JSON.stringify({
+      model: "llama3.1-8b",
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      max_tokens: 450,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error?.message ?? res.status), { status: res.status });
+  return data.choices[0].message.content;
+}
+
+const PROVIDERS = [
+  { name: "Groq", fn: callGroq },
+  { name: "Gemini", fn: callGemini },
+  { name: "Cerebras", fn: callCerebras },
+];
+
 export async function POST(req: Request) {
   try {
-    const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
     const { messages, summary, profile } = await req.json();
 
     const messagesWithReminder = messages.map(
-      (m: { role: string; content: string }, i: number) =>
+      (m: Message, i: number) =>
         i === messages.length - 1 && m.role === "user"
           ? { ...m, content: m.content + "\n\n[Lembre-se: máximo 3 frases na sua resposta.]" }
           : m
     );
 
+    const systemPrompt = buildSystemPrompt(profile, summary);
     const MIN_DELAY = 3000;
     const MAX_DELAY = 6000;
     const FAST_THRESHOLD = 6000;
-
     const started = Date.now();
 
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 20000);
-
     let accumulated = "";
-    try {
-      const stream = await client.chat.completions.create(
-        {
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "system", content: buildSystemPrompt(profile, summary) }, ...messagesWithReminder],
-          stream: true,
-          max_tokens: 450,
-        },
-        { signal: abort.signal }
-      );
+    let lastError: unknown;
 
-      for await (const chunk of stream) {
-        accumulated += chunk.choices[0]?.delta?.content ?? "";
+    for (const { name, fn } of PROVIDERS) {
+      try {
+        accumulated = await fn(messagesWithReminder, systemPrompt);
+        console.log(`[chat] provider: ${name}`);
+        break;
+      } catch (err) {
+        console.warn(`[chat] ${name} falhou:`, err);
+        lastError = err;
       }
-    } finally {
-      clearTimeout(timer);
+    }
+
+    if (!accumulated) {
+      const status = (lastError as { status?: number })?.status;
+      return new Response(status === 429 ? "limite" : "erro", { status: status === 429 ? 429 : 500 });
     }
 
     const elapsed = Date.now() - started;
     if (elapsed < FAST_THRESHOLD) {
       const target = MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY);
-      const wait = Math.max(0, target - elapsed);
-      await new Promise((r) => setTimeout(r, wait));
+      await new Promise((r) => setTimeout(r, Math.max(0, target - elapsed)));
     }
 
     return new Response(accumulated, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
-  } catch (err: unknown) {
+  } catch (err) {
     console.error("[chat]", err);
-    const status = (err as { status?: number })?.status;
-    if (status === 429) {
-      return new Response("limite", { status: 429 });
-    }
     return new Response("erro", { status: 500 });
   }
 }
