@@ -1,7 +1,5 @@
 import Groq from "groq-sdk";
 
-const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 const SYSTEM_PROMPT = `Você é Auscultare. Você acompanha pessoas — ouve, compreende, e só então orienta.
 
 ## A sequência que nunca muda
@@ -62,6 +60,7 @@ function buildSystemPrompt(
 
 export async function POST(req: Request) {
   try {
+    const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
     const { messages, summary, profile } = await req.json();
 
     const messagesWithReminder = messages.map(
