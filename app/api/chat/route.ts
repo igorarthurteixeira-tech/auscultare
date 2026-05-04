@@ -56,7 +56,7 @@ function buildSystemPrompt(
   return SYSTEM_PROMPT + (parts.length > 0 ? "\n\n" + parts.join("\n\n") : "");
 }
 
-type Message = { role: string; content: string };
+type Message = { role: "user" | "assistant" | "system"; content: string };
 
 async function callGroq(messages: Message[], systemPrompt: string): Promise<string> {
   const { default: Groq } = await import("groq-sdk");
