@@ -21,7 +21,7 @@ export default function SaintQuote() {
         style={{ color: "var(--accent)", fontFamily: "var(--font-cormorant)" }}
         aria-hidden="true"
       >
-        "
+        &ldquo;
       </span>
 
       {/* Quote text */}

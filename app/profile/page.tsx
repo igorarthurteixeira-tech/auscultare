@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, MessageSquare, Clock, CreditCard } from "lucide-react";
 import { onAuthChange, sendPasswordReset } from "@/lib/auth";
-import { getProfile, saveProfile, Profile } from "@/lib/profile";
+import { getProfile, saveProfile } from "@/lib/profile";
 import { getConversations } from "@/lib/conversations";
 
 const AGE_RANGES = ["Menos de 18", "18–24", "25–34", "35–44", "45–54", "55+"];
@@ -33,7 +33,6 @@ export default function ProfilePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [memberSince, setMemberSince] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [convCount, setConvCount] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
 
@@ -57,7 +56,6 @@ export default function ProfilePage() {
       }
       const p = await getProfile(user.uid);
       if (p) {
-        setProfile(p);
         setName(p.name ?? "");
         setAgeRange(p.ageRange ?? "");
         setMotivation(p.motivation ?? "");

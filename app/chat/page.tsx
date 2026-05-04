@@ -17,11 +17,14 @@ import {
   Conversation,
 } from "@/lib/conversations";
 import { windowMessages } from "@/lib/memory";
+import { getBalance, initFreeTrialIfNeeded, deductBalance } from "@/lib/balance";
+import { WARNING_SECONDS, URGENT_SECONDS } from "@/lib/plans";
 import Greeting from "@/components/Greeting";
 import SaintQuote from "@/components/SaintQuote";
 import ChatInput from "@/components/ChatInput";
 import ChatMessage from "@/components/ChatMessage";
 import Sidebar from "@/components/Sidebar";
+import PlanModal from "@/components/PlanModal";
 
 export default function Chat() {
   const router = useRouter();
@@ -38,11 +41,15 @@ export default function Chat() {
   const [sessionStart, setSessionStart] = useState<number | null>(null);
   const [sessionOffset, setSessionOffset] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const conversationIdRef = useRef<string | null>(null);
-  conversationIdRef.current = conversationId;
+  const lastDeductRef = useRef<number>(0);
   const hasMessages = messages.length > 0 || isLoading;
+  const balanceExhausted = balance !== null && balance <= 0;
+  const balanceWarning = balance !== null && balance > 0 && balance <= WARNING_SECONDS;
+  const balanceUrgent = balance !== null && balance > 0 && balance <= URGENT_SECONDS;
 
   const pauseTimer = (convId: string | null) => {
     if (!convId || !sessionStart) return;
@@ -70,6 +77,17 @@ export default function Chat() {
       setProfile(p);
       const convs = await getConversations(user.uid);
       setConversations(convs);
+      await initFreeTrialIfNeeded(user.uid);
+      const bal = await getBalance(user.uid);
+      setBalance(bal);
+
+      // verifica se voltou de pagamento bem-sucedido
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("payment") === "success") {
+        const newBal = await getBalance(user.uid);
+        setBalance(newBal);
+        window.history.replaceState({}, "", "/chat");
+      }
     });
     return unsub;
   }, [router]);
@@ -79,10 +97,21 @@ export default function Chat() {
   }, [messages, streamingText]);
 
   useEffect(() => {
-    if (!sessionStart) return;
-    const id = setInterval(() => setElapsed(sessionOffset + Math.floor((Date.now() - sessionStart) / 1000)), 1000);
+    if (!sessionStart || !userId || anonymous) return;
+    const id = setInterval(() => {
+      const secs = sessionOffset + Math.floor((Date.now() - sessionStart) / 1000);
+      setElapsed(secs);
+      // deduz saldo a cada 30 segundos
+      if (secs - lastDeductRef.current >= 30) {
+        const diff = secs - lastDeductRef.current;
+        lastDeductRef.current = secs;
+        deductBalance(userId, diff).then(() =>
+          getBalance(userId).then(setBalance)
+        );
+      }
+    }, 1000);
     return () => clearInterval(id);
-  }, [sessionStart, sessionOffset]);
+  }, [sessionStart, sessionOffset, userId, anonymous]);
 
   const handleSelectConversation = async (id: string) => {
     if (!userId) return;
@@ -313,6 +342,24 @@ export default function Chat() {
         </div>
       </header>
 
+      {/* Avisos de saldo */}
+      {!anonymous && balanceUrgent && !balanceExhausted && (
+        <div className="flex justify-center py-2 px-4">
+          <span className="text-xs px-4 py-2 rounded-full" style={{ background: "#FEE2E2", color: "#B91C1C", fontFamily: "var(--font-inter)" }}>
+            Restam menos de 2 minutos de sessão.{" "}
+            <button onClick={() => setShowPlanModal(true)} className="underline font-medium">Adicionar horas</button>
+          </span>
+        </div>
+      )}
+      {!anonymous && balanceWarning && !balanceUrgent && (
+        <div className="flex justify-center py-2 px-4">
+          <span className="text-xs px-4 py-2 rounded-full" style={{ background: "#FEF3C7", color: "#92400E", fontFamily: "var(--font-inter)" }}>
+            Restam cerca de {Math.ceil((balance ?? 0) / 60)} minutos de sessão.{" "}
+            <button onClick={() => setShowPlanModal(true)} className="underline font-medium">Adicionar horas</button>
+          </span>
+        </div>
+      )}
+
       {/* Landing */}
       {!hasMessages && (
         <section className="flex-1 flex flex-col items-center justify-center gap-5 px-4 py-6 overflow-hidden">
@@ -320,7 +367,7 @@ export default function Chat() {
           <SaintQuote />
 
           <div className="w-full max-w-2xl px-4 space-y-3">
-            <ChatInput onSend={sendMessage} disabled={isLoading} />
+            <ChatInput onSend={sendMessage} disabled={isLoading || (!anonymous && balanceExhausted)} />
 
             {/* Modo anônimo */}
             <div className="flex items-center justify-center gap-2">
@@ -382,9 +429,28 @@ export default function Chat() {
 
           <div className="shrink-0 px-4 py-4 border-t"
             style={{ background: "var(--background)", borderColor: "var(--border)" }}>
-            <ChatInput onSend={sendMessage} disabled={isLoading} />
+            {!anonymous && balanceExhausted ? (
+              <div className="text-center space-y-3 py-2">
+                <p className="text-sm" style={{ color: "var(--muted)", fontFamily: "var(--font-inter)" }}>
+                  Seu tempo de sessão acabou.
+                </p>
+                <button
+                  onClick={() => setShowPlanModal(true)}
+                  className="px-6 py-2.5 rounded-full text-sm font-medium"
+                  style={{ background: "var(--accent)", color: "#fff", fontFamily: "var(--font-inter)" }}
+                >
+                  Adicionar horas
+                </button>
+              </div>
+            ) : (
+              <ChatInput onSend={sendMessage} disabled={isLoading || (!anonymous && balanceExhausted)} />
+            )}
           </div>
         </>
+      )}
+
+      {showPlanModal && userId && (
+        <PlanModal userId={userId} onClose={() => setShowPlanModal(false)} />
       )}
     </main>
   );
