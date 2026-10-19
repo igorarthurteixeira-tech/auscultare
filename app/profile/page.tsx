@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, MessageSquare, Clock, CreditCard } from "lucide-react";
+import { ArrowLeft, Check, MessageSquare, Clock, CreditCard, Plus } from "lucide-react";
 import { onAuthChange, sendPasswordReset } from "@/lib/auth";
 import { getProfile, saveProfile } from "@/lib/profile";
 import { getConversations } from "@/lib/conversations";
+import { getBalance } from "@/lib/balance";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { WARNING_SECONDS, URGENT_SECONDS } from "@/lib/plans";
+import PlanModal from "@/components/PlanModal";
 
 const AGE_RANGES = ["Menos de 18", "18–24", "25–34", "35–44", "45–54", "55+"];
 
@@ -35,6 +40,9 @@ export default function ProfilePage() {
   const [memberSince, setMemberSince] = useState<string | null>(null);
   const [convCount, setConvCount] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [freeTrialUsed, setFreeTrialUsed] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
 
   const [name, setName] = useState("");
   const [ageRange, setAgeRange] = useState("");
@@ -64,6 +72,14 @@ export default function ProfilePage() {
       const convs = await getConversations(user.uid);
       setConvCount(convs.length);
       setTotalTime(getTotalSessionTime());
+
+      const bal = await getBalance(user.uid);
+      setBalance(bal);
+      const profileRef = doc(db, "profiles", user.uid);
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        setFreeTrialUsed(profileSnap.data().freeTrialUsed === true);
+      }
     });
     return unsub;
   }, [router]);
@@ -92,6 +108,9 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen" style={{ background: "var(--background)" }}>
+      {showPlanModal && userId && (
+        <PlanModal userId={userId} onClose={() => setShowPlanModal(false)} />
+      )}
       {/* Header */}
       <header className="sticky top-0 z-10 flex items-center gap-3 px-4 py-4 border-b"
         style={{ background: "var(--background)", borderColor: "var(--border)" }}>
@@ -141,7 +160,7 @@ export default function ProfilePage() {
               </div>
               <span className="text-xs px-3 py-1 rounded-full"
                 style={{ background: "var(--accent-light)", color: "var(--accent)", fontFamily: "var(--font-inter)" }}>
-                Gratuito
+                {freeTrialUsed ? "Horas avulsas" : "Teste gratuito"}
               </span>
             </div>
 
@@ -170,19 +189,40 @@ export default function ProfilePage() {
             {/* Tempo restante */}
             <div className="px-5 py-4 flex items-center justify-between" style={{ background: "var(--card)" }}>
               <div className="flex items-center gap-3">
-                <Clock size={15} style={{ color: "var(--muted)" }} />
+                <Clock size={15} style={{
+                  color: balance !== null && balance <= URGENT_SECONDS ? "#c0392b"
+                    : balance !== null && balance <= WARNING_SECONDS ? "#b7860b"
+                    : "var(--accent)"
+                }} />
                 <div>
                   <p className="text-sm" style={{ color: "var(--foreground)", fontFamily: "var(--font-inter)" }}>
-                    Tempo restante no plano
+                    Tempo restante
                   </p>
                   <p className="text-xs" style={{ color: "var(--muted)", fontFamily: "var(--font-inter)" }}>
-                    Disponível neste período
+                    Saldo disponível para sessões
                   </p>
                 </div>
               </div>
-              <p className="text-sm font-medium" style={{ color: "var(--muted)", fontFamily: "var(--font-inter)" }}>
-                Ilimitado
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium tabular-nums" style={{
+                  color: balance !== null && balance <= URGENT_SECONDS ? "#c0392b"
+                    : balance !== null && balance <= WARNING_SECONDS ? "#b7860b"
+                    : "var(--foreground)",
+                  fontFamily: "var(--font-inter)"
+                }}>
+                  {balance === null ? "—" : balance <= 0 ? "Esgotado" : formatTime(balance)}
+                </p>
+                {userId && (
+                  <button
+                    onClick={() => setShowPlanModal(true)}
+                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-opacity hover:opacity-80"
+                    style={{ background: "var(--accent-light)", color: "var(--accent)", fontFamily: "var(--font-inter)" }}
+                  >
+                    <Plus size={11} />
+                    Horas
+                  </button>
+                )}
+              </div>
             </div>
 
             <div style={{ height: "1px", background: "var(--border)" }} />
@@ -200,14 +240,6 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <div style={{ height: "1px", background: "var(--border)" }} />
-
-            {/* Upgrade */}
-            <div className="px-5 py-4" style={{ background: "var(--card)" }}>
-              <p className="text-xs" style={{ color: "var(--muted)", fontFamily: "var(--font-inter)" }}>
-                Planos com horas contratadas e controle de sessão em breve.
-              </p>
-            </div>
           </div>
         </section>
 

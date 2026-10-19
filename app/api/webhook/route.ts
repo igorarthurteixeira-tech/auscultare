@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { addBalance, markFreeTrialUsed } from "@/lib/balance";
+import { getAdminDb, adminIncrement } from "@/lib/firebase-admin";
 
 export async function POST(req: Request) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -18,8 +18,11 @@ export async function POST(req: Request) {
     const { userId, hours } = session.metadata ?? {};
     if (userId && hours) {
       const seconds = parseInt(hours) * 3600;
-      await addBalance(userId, seconds);
-      await markFreeTrialUsed(userId);
+      const db = getAdminDb();
+      await db.collection("profiles").doc(userId).update({
+        balanceSeconds: adminIncrement(seconds),
+        freeTrialUsed: true,
+      });
     }
   }
 

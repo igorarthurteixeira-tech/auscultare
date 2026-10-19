@@ -11,18 +11,26 @@ interface PlanModalProps {
 
 export default function PlanModal({ userId, onClose }: PlanModalProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   const handleSelect = async (planId: string) => {
     setLoading(planId);
+    setError("");
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId, userId, origin: window.location.origin }),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Erro ${res.status}`);
+      }
       const { url } = await res.json();
       if (url) window.location.href = url;
-    } catch {
+      else throw new Error("URL de pagamento não recebida.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao abrir pagamento.");
       setLoading(null);
     }
   };
@@ -85,8 +93,13 @@ export default function PlanModal({ userId, onClose }: PlanModalProps) {
           ))}
         </div>
 
+        {error && (
+          <p className="text-center text-xs px-6 pb-2" style={{ color: "#c0392b", fontFamily: "var(--font-inter)" }}>
+            {error}
+          </p>
+        )}
         <p className="text-center text-xs pb-5" style={{ color: "var(--muted)", fontFamily: "var(--font-inter)" }}>
-          Pagamento seguro via Stripe · Cartão ou Pix
+          Pagamento seguro via Stripe · Cartão
         </p>
       </div>
     </div>

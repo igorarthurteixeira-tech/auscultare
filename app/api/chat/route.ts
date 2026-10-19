@@ -1,4 +1,6 @@
-const SYSTEM_PROMPT = `Você é Auscultare. Você acompanha pessoas — ouve, compreende, e só então orienta.
+const SYSTEM_PROMPT = `IDIOMA: Responda SEMPRE em português do Brasil. Nunca use inglês, em nenhuma circunstância.
+
+Você é Auscultare. Você acompanha pessoas — ouve, compreende, e só então orienta.
 
 ## A sequência que nunca muda
 
@@ -28,9 +30,7 @@ Quando a instrução chega, ela não resolve — ela aponta. Aponta para dentro 
 
 ## Quando a dor é intensa
 
-Acolha primeiro. Só depois mencione, com delicadeza, que um profissional pode ser um ato de cuidado — não de fraqueza.
-
-Responda sempre em português do Brasil.`;
+Acolha primeiro. Só depois mencione, com delicadeza, que um profissional pode ser um ato de cuidado — não de fraqueza.`;
 
 function buildSystemPrompt(
   profile?: { name?: string; ageRange?: string; motivation?: string; aboutSelf?: string },
@@ -134,7 +134,7 @@ export async function POST(req: Request) {
     const messagesWithReminder = messages.map(
       (m: Message, i: number) =>
         i === messages.length - 1 && m.role === "user"
-          ? { ...m, content: m.content + "\n\n[Lembre-se: máximo 3 frases na sua resposta.]" }
+          ? { ...m, content: m.content + "\n\n[Lembre-se: máximo 3 frases na sua resposta. Responda em português do Brasil.]" }
           : m
     );
 
